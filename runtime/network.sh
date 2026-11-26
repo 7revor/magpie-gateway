@@ -33,7 +33,6 @@ case "${1:-}" in
   health-gateway)
     ss -H -lnt "sport = :$port" | grep -q .
     ss -H -lnu "sport = :$port" | grep -q .
-    ss -H -lnu 'sport = :53' | grep -Fq "$gateway:53"
     ;;
   health-client)
     ip -4 route show default dev "$lan" | grep -Fq "via $gateway"

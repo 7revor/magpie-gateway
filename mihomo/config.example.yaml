@@ -6,22 +6,25 @@ bind-address: "*"
 tproxy-port: 7893
 
 dns:
-  enable: true
-  listen: 10.77.0.2:53
-  ipv6: false
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  default-nameserver:
-    - https://1.1.1.1/dns-query
-  nameserver:
-    - https://1.1.1.1/dns-query
-  proxy-server-nameserver:
-    - https://1.1.1.1/dns-query
+  enable: false
 
-# 示例节点是保留地址，部署前替换为真实节点，保留名称或同步修改规则。
+# Magpie 的 DNS 和其他出站流量都按源 IP 走各自的 Shadowsocks 节点。
+# 部署前替换地址、端口、加密方法和密码；服务端也必须启用 UDP。
 proxies:
-  - {name: EXIT-A, type: http, server: 192.0.2.11, port: 1080}
-  - {name: EXIT-B, type: http, server: 192.0.2.12, port: 1080}
+  - name: EXIT-A
+    type: ss
+    server: 192.0.2.11
+    port: 8388
+    cipher: aes-128-gcm
+    password: "replace-with-exit-a-password"
+    udp: true
+  - name: EXIT-B
+    type: ss
+    server: 192.0.2.12
+    port: 8388
+    cipher: aes-128-gcm
+    password: "replace-with-exit-b-password"
+    udp: true
 
 # 固定目标的 Web 管理转发。DIRECT 仅用于访问 LAN 上的这两个端口。
 tunnels:

@@ -20,7 +20,7 @@ Oracle A1（ARM64）上用 Docker Compose 启动一个 Mihomo 和多个 Magpie�
    cp mihomo/config.example.yaml mihomo/config.yaml
    ```
 
-3. 无需预设 API Key 或 Web 登录密钥。可用 `MAGPIE_TZ_01`、`MAGPIE_TZ_02` 分别设置容器时区，默认 `Asia/Shanghai`。在 `mihomo/config.yaml` 替换两个保留地址示例节点；已有配置的部署请合并模板里的 `tunnels:`，不要覆盖节点或规则。需要 UDP（例如 QUIC）时使用支持 UDP 的节点，示例 HTTP 节点只支持 TCP。
+3. 无需预设 API Key 或 Web 登录密钥。可用 `MAGPIE_TZ_01`、`MAGPIE_TZ_02` 分别设置容器时区，默认 `Asia/Shanghai`。在 `mihomo/config.yaml` 填入真实 Shadowsocks 节点的地址、端口、加密方法和密码，保留 `udp: true`。服务端必须启用 UDP，且其防火墙和安全组要允许节点端口的 UDP 入站；出口必须能访问 `1.1.1.1:53`。不要把真实配置提交到 Git。
 4. 从本目录启动：
 
    ```sh
@@ -29,6 +29,22 @@ Oracle A1（ARM64）上用 Docker Compose 启动一个 Mihomo 和多个 Magpie�
    docker compose ps
    docker compose logs --tail=100 mihomo
    ```
+
+已有部署：不要用模板覆盖实际节点或规则。把原 `dns:` 块改为 `dns: {enable: false}`，并确认各实例匹配的 Shadowsocks 节点支持 UDP；保留源 IP 规则和 Web `tunnels:`。更新代码后执行 `docker compose up -d --build --force-recreate --wait`，重建后仍使用原有数据卷。
+
+## DNS 出站
+
+每台 Magpie 的系统 DNS 都是 `1.1.1.1`。Mihomo 不监听 DNS 端口，不使用 Fake IP，只透明代理 DNS 流量：`10.77.0.11` 的 DNS 查询经过 `EXIT-A`，`10.77.0.12` 的查询经过 `EXIT-B`。Docker 内置 DNS `127.0.0.11` 仍被阻止，也不配置直连兜底。
+
+可用下面的命令验证系统解析，并检查 Mihomo 日志中发往 `1.1.1.1:53` 的连接是否分别命中 `EXIT-A` 和 `EXIT-B`：
+
+```sh
+docker compose exec magpie-01 getent ahostsv4 example.com
+docker compose exec magpie-02 getent ahostsv4 example.com
+docker compose logs --tail=100 mihomo | grep -F '1.1.1.1:53'
+```
+
+某个出口的 UDP 不通时，对应实例的系统 DNS 查询可能失败，即使该出口的 TCP 正常。排查时先确认 Shadowsocks 服务端和中转都支持 UDP。Mihomo 自己解析代理节点域名（如果使用域名作为 `server`）与 Magpie 的 DNS 分流是两件事。
 
 ## Web 管理
 
@@ -52,7 +68,6 @@ Web 登录密钥只用于打开管理界面，不是调用 API 的密钥。登�
 
 - 账号登录、Provider、密钥和缓存等状态都保存在 `/config`。两个实例分别使用命名卷 `magpie_01_state` 和 `magpie_02_state`，不要混用，也不要用 `docker compose down -v` 来做普通停机。请备份卷、`.env` 和 Mihomo 实配；它们可能含敏感凭据。若从旧方案已有业务配置，迁移进对应的卷后再启动，不会自动读取旧的 `magpie/01/`、`magpie/02/`。
 - Mihomo 状态保留在命名卷 `mihomo_state`。更新配置后可用 `docker compose up -d --force-recreate mihomo` 重新绑定配置文件。
-- Magpie 的系统 DNS 指向 `10.77.0.2`，禁止使用 Docker 内置 DNS `127.0.0.11`。默认由 Mihomo 统一访问上游 DoH，**DNS 上游不按实例分流**。如需 DNS 也按实例隔离，要另行配置；应用自行发起的 DoH 属于普通应用出站流量。
 - 新增实例时，复制一对 `magpie-net-02` 和 `magpie-02`，改服务名、网络命名空间引用、命名卷、环境变量和固定 IP（如 `10.77.0.13`）。在 Mihomo 的 `MATCH,REJECT` 前增加对应源 IP 规则，在 `tunnels:` 和 Compose 的 `mihomo.ports` 增加管理端口（如 `3433`）。固定出口不应配置 `DIRECT` 回退。
 - `magpie-net-*` 持有各自实例的网络命名空间，负责设置默认路由和 DNS 限制。Magpie 本身没有 `NET_ADMIN`。重建网络容器时连同对应的 Magpie 一起重建，例如 `docker compose up -d --force-recreate magpie-net-01 magpie-01`。
 
