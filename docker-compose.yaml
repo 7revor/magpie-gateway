@@ -7,6 +7,8 @@ x-network-runtime: &network-runtime
   platform: linux/arm64
   cap_drop: [ALL]
   cap_add: [NET_ADMIN]
+  # 覆盖上游镜像声明的 VOLUME；真实状态写入 ./data/mihomo。
+  tmpfs: [/root/.config/mihomo]
   restart: unless-stopped
   sysctls:
     net.ipv6.conf.all.disable_ipv6: "1"
@@ -30,9 +32,31 @@ x-resolver: &resolver
     create_host_path: false
 
 services:
+  state-init:
+    image: alpine:3.23
+    platform: linux/arm64
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt: [no-new-privileges:true]
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        chown 0:0 /state/mihomo
+        chown 65532:65532 /state/magpie-01 /state/magpie-02
+        chmod 0700 /state/mihomo /state/magpie-01 /state/magpie-02
+    volumes:
+      - ./data/mihomo:/state/mihomo
+      - ./data/magpie-01:/state/magpie-01
+      - ./data/magpie-02:/state/magpie-02
+
   mihomo:
     <<: *network-runtime
     command: [gateway]
+    depends_on:
+      state-init:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:3431:3431"
       - "127.0.0.1:3432:3432"
@@ -48,7 +72,7 @@ services:
         read_only: true
         bind:
           create_host_path: false
-      - mihomo_state:/var/lib/mihomo
+      - ./data/mihomo:/var/lib/mihomo
     networks:
       wan:
         gw_priority: 100
@@ -89,7 +113,7 @@ services:
       TZ: ${MAGPIE_TZ_01:-}
     volumes:
       - *resolver
-      - magpie_01_state:/config
+      - ./data/magpie-01:/config
 
   magpie-net-02:
     <<: *magpie-net
@@ -110,7 +134,7 @@ services:
       TZ: ${MAGPIE_TZ_02:-}
     volumes:
       - *resolver
-      - magpie_02_state:/config
+      - ./data/magpie-02:/config
 
 networks:
   wan:
@@ -127,8 +151,3 @@ networks:
       config:
         - subnet: 10.77.0.0/24
           gateway: 10.77.0.1
-
-volumes:
-  mihomo_state:
-  magpie_01_state:
-  magpie_02_state:

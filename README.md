@@ -30,7 +30,7 @@ Oracle A1（ARM64）上用 Docker Compose 启动一个 Mihomo 和多个 Magpie�
    docker compose logs --tail=100 mihomo
    ```
 
-已有部署：不要用模板覆盖实际节点或规则。将模板里的 `dns:` 块合并到 `mihomo/config.yaml`，并将 `store-fake-ip: true` 合入 `profile:`；保留 `proxies:`、`rules:`、`tunnels:`，不要重复定义同名配置块。更新代码后执行 `docker compose up -d --build --force-recreate --wait`，重建后仍使用原有数据卷。
+已有部署：不要用模板覆盖实际节点或规则。若实配还没开启 Fake IP，将模板里的 `dns:` 块合并到 `mihomo/config.yaml`，并将 `store-fake-ip: true` 合入 `profile:`。若仍使用旧版 Docker 命名卷，先按下方步骤迁移，再重新启动。
 
 ## IPv4 Fake IP 和节点 IPv6 出站
 
@@ -62,18 +62,45 @@ ssh -N -o ExitOnForwardFailure=yes \
 
 Magpie 每次启动会生成临时 Web 登录密钥。在宿主机运行 `docker compose logs --tail=50 magpie-01 magpie-02`，分别从两个实例最新的启动日志复制 `?k=...`。在本机浏览器打开 `http://magpie-01.localhost:3431/?k=<实例01临时密钥>` 和 `http://magpie-02.localhost:3432/?k=<实例02临时密钥>`。用不同的主机名，避免浏览器在两个端口间共用登录 Cookie。如果设备不解析 `*.localhost`，可分别用独立的浏览器配置访问 `127.0.0.1:3431` 和 `127.0.0.1:3432`。不要分享带密钥的链接或启动日志。
 
-Web 登录密钥只用于打开管理界面，不是调用 API 的密钥。登录以后，在各实例的 **Gateway → Gateway keys** 自行创建 API Key；供应商凭据也可以在 **Providers** 中配置。你在 UI 创建的网关密钥随该实例的 `/config` 卷持久化，不受临时 Web 登录密钥轮换影响。
+Web 登录密钥只用于打开管理界面，不是调用 API 的密钥。登录以后，在各实例的 **Gateway → Gateway keys** 自行创建 API Key；供应商凭据也可以在 **Providers** 中配置。你在 UI 创建的网关密钥保存在该实例的 `/config` 目录，不受临时 Web 登录密钥轮换影响。
 
 关闭 SSH 就关闭本机访问通道，不会停服务。要关停单个实例，在宿主机运行 `docker compose stop magpie-01`；重新开启用 `docker compose start magpie-01`。Web UI 不作为 Docker 停机控制面。排障可用 `docker compose exec magpie-01 sh`，无需开放通用代理。
 
 ## 维护
 
-- 账号登录、Provider、密钥和缓存等状态都保存在 `/config`。两个实例分别使用命名卷 `magpie_01_state` 和 `magpie_02_state`，不要混用，也不要用 `docker compose down -v` 来做普通停机。请备份卷、`.env` 和 Mihomo 实配；它们可能含敏感凭据。若从旧方案已有业务配置，迁移进对应的卷后再启动，不会自动读取旧的 `magpie/01/`、`magpie/02/`。
-- Mihomo 状态保留在命名卷 `mihomo_state`。更新配置后可用 `docker compose up -d --force-recreate mihomo` 重新绑定配置文件。
-- 新增实例时，复制一对 `magpie-net-02` 和 `magpie-02`，改服务名、网络命名空间引用、命名卷、环境变量和固定 IP（如 `10.77.0.13`）。在 Mihomo 的 `MATCH,REJECT` 前增加对应源 IP 规则，在 `tunnels:` 和 Compose 的 `mihomo.ports` 增加管理端口（如 `3433`）。固定出口不应配置 `DIRECT` 回退。
+- 持久化数据都位于项目目录的 `data/` 下，使用宿主机目录绑定挂载，不使用 Docker 命名卷：`./data/magpie-01` 和 `./data/magpie-02` 分别映射到两个实例的 `/config`，`./data/mihomo` 映射到 `/var/lib/mihomo`。
+- `state-init` 是一次性、无网络的目录权限初始化容器。它把三处数据目录设为 `0700`，只改目录本身，不递归改现有文件；Magpie 仍以 UID `65532` 运行。请备份 `data/`、`.env` 和 Mihomo 实配，它们可能含敏感凭据，默认都不进入 Git。
+- 更新 Mihomo 配置后可用 `docker compose up -d --force-recreate mihomo` 重新绑定配置文件。
+- 新增实例时，复制一对 `magpie-net-02` 和 `magpie-02`，改服务名、网络命名空间引用、数据目录、环境变量和固定 IP（如 `10.77.0.13`），同时给 `state-init` 加上新目录的挂载及权限设置。在 Mihomo 的 `MATCH,REJECT` 前增加对应源 IP 规则，在 `tunnels:` 和 Compose 的 `mihomo.ports` 增加管理端口（如 `3433`）。固定出口不应配置 `DIRECT` 回退。
 - `magpie-net-*` 持有各自实例的网络命名空间，负责设置默认路由和 DNS 限制。Magpie 本身没有 `NET_ADMIN`。重建网络容器时连同对应的 Magpie 一起重建，例如 `docker compose up -d --force-recreate magpie-net-01 magpie-01`。
 
 验收时从每个实例发起 HTTPS 请求，核对公网出口和 Mihomo 日志中的源地址、命中规则。停掉对应出口或 Mihomo 后，请求应失败而非走宿主机直连。容器不启用 IPv6，ICMP 不走这套 TCP/UDP 透明代理，不要用 `ping` 当作验收标准。
+
+## 从旧版命名卷迁移
+
+升级后不会自动读取旧卷。先 `docker compose down`（**不要加 `-v`**），然后在项目目录执行；把 `project` 换成实际的 Compose 项目名，可以先用 `docker volume ls` 核对：
+
+```sh
+project=magpie-gateway
+migrate() {
+  old_volume="${project}_$1"
+  docker volume inspect "$old_volume" >/dev/null &&
+    mkdir -p "data/$2" &&
+    docker run --rm --network none \
+      --mount "type=volume,src=$old_volume,dst=/old,readonly" \
+      --mount "type=bind,src=$PWD/data/$2,dst=/new" \
+      alpine:3.23 sh -ec '
+        test -z "$(ls -A /new)" || { echo "目标目录非空，取消复制" >&2; exit 1; }
+        cp -a /old/. /new/
+        chown -Rh "$1" /new
+      ' sh "$3"
+}
+migrate mihomo_state mihomo 0:0 &&
+  migrate magpie_01_state magpie-01 65532:65532 &&
+  migrate magpie_02_state magpie-02 65532:65532
+```
+
+复制成功后运行 `docker compose up -d --build --wait`，检查实例的账号和配置。确认无误前保留原卷。
 
 ## 许可证
 
