@@ -23,6 +23,11 @@ proxies:
   - {name: EXIT-A, type: http, server: 192.0.2.11, port: 1080}
   - {name: EXIT-B, type: http, server: 192.0.2.12, port: 1080}
 
+# 固定目标的 Web 管理转发。DIRECT 仅用于访问 LAN 上的这两个端口。
+tunnels:
+  - tcp,0.0.0.0:3431,10.77.0.11:3430,DIRECT
+  - tcp,0.0.0.0:3432,10.77.0.12:3430,DIRECT
+
 rules:
   - SRC-IP-CIDR,10.77.0.11/32,EXIT-A
   - SRC-IP-CIDR,10.77.0.12/32,EXIT-B

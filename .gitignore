@@ -1,5 +1,4 @@
 /.pi/worktrees/
 /.env
 /mihomo/config.yaml
-/magpie/[0-9][0-9]/*
-!/magpie/[0-9][0-9]/.gitkeep
+/magpie/[0-9][0-9]/

@@ -13,7 +13,8 @@ x-network-runtime: &network-runtime
     net.ipv6.conf.default.disable_ipv6: "1"
 
 x-magpie: &magpie
-  image: ${MAGPIE_IMAGE:?请在 .env 中设置 ARM64 Magpie 镜像}
+  image: ${MAGPIE_IMAGE:-ghcr.io/yetone/magpie:stable}
+  command: [web, --addr, "0.0.0.0:3430", --no-open]
   platform: linux/arm64
   init: true
   restart: unless-stopped
@@ -32,6 +33,9 @@ services:
   mihomo:
     <<: *network-runtime
     command: [gateway]
+    ports:
+      - "127.0.0.1:3431:3431"
+      - "127.0.0.1:3432:3432"
     cap_add: [NET_ADMIN, NET_BIND_SERVICE]
     sysctls:
       net.ipv4.ip_forward: "0"
@@ -80,14 +84,13 @@ services:
       magpie-net-01:
         condition: service_healthy
         restart: true
+    environment:
+      MAGPIE_NAME: magpie-01
+      MAGPIE_WEB_KEY: ${MAGPIE_WEB_KEY_01:?请在 .env 中设置实例 01 的 Web 密钥}
+      TZ: ${MAGPIE_TZ_01:-Asia/Shanghai}
     volumes:
       - *resolver
-      - type: bind
-        source: ./magpie/01
-        target: ${MAGPIE_CONFIG_DIR:?请在 .env 中设置 Magpie 镜像内的配置目录}
-        read_only: true
-        bind:
-          create_host_path: false
+      - magpie_01_state:/config
 
   magpie-net-02:
     <<: *magpie-net
@@ -103,14 +106,13 @@ services:
       magpie-net-02:
         condition: service_healthy
         restart: true
+    environment:
+      MAGPIE_NAME: magpie-02
+      MAGPIE_WEB_KEY: ${MAGPIE_WEB_KEY_02:?请在 .env 中设置实例 02 的 Web 密钥}
+      TZ: ${MAGPIE_TZ_02:-Asia/Shanghai}
     volumes:
       - *resolver
-      - type: bind
-        source: ./magpie/02
-        target: ${MAGPIE_CONFIG_DIR:?请在 .env 中设置 Magpie 镜像内的配置目录}
-        read_only: true
-        bind:
-          create_host_path: false
+      - magpie_02_state:/config
 
 networks:
   wan:
@@ -130,3 +132,5 @@ networks:
 
 volumes:
   mihomo_state:
+  magpie_01_state:
+  magpie_02_state:
