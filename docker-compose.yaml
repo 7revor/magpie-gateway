@@ -86,7 +86,6 @@ services:
         restart: true
     environment:
       MAGPIE_NAME: magpie-01
-      MAGPIE_WEB_KEY: ${MAGPIE_WEB_KEY_01:?请在 .env 中设置实例 01 的 Web 密钥}
       TZ: ${MAGPIE_TZ_01:-Asia/Shanghai}
     volumes:
       - *resolver
@@ -108,7 +107,6 @@ services:
         restart: true
     environment:
       MAGPIE_NAME: magpie-02
-      MAGPIE_WEB_KEY: ${MAGPIE_WEB_KEY_02:?请在 .env 中设置实例 02 的 Web 密钥}
       TZ: ${MAGPIE_TZ_02:-Asia/Shanghai}
     volumes:
       - *resolver

@@ -20,7 +20,7 @@ Oracle A1（ARM64）上用 Docker Compose 启动一个 Mihomo 和多个 Magpie�
    cp mihomo/config.example.yaml mihomo/config.yaml
    ```
 
-3. 用 `openssl rand -hex 16` 分别生成两个密钥，填入 `.env` 的 `MAGPIE_WEB_KEY_01` 和 `MAGPIE_WEB_KEY_02`。用 `MAGPIE_TZ_01`、`MAGPIE_TZ_02` 分别设置容器时区，默认 `Asia/Shanghai`。在 `mihomo/config.yaml` 替换两个保留地址示例节点；已有配置的部署请合并模板里的 `tunnels:`，不要覆盖节点或规则。需要 UDP（例如 QUIC）时使用支持 UDP 的节点，示例 HTTP 节点只支持 TCP。
+3. 无需预设 API Key 或 Web 登录密钥。可用 `MAGPIE_TZ_01`、`MAGPIE_TZ_02` 分别设置容器时区，默认 `Asia/Shanghai`。在 `mihomo/config.yaml` 替换两个保留地址示例节点；已有配置的部署请合并模板里的 `tunnels:`，不要覆盖节点或规则。需要 UDP（例如 QUIC）时使用支持 UDP 的节点，示例 HTTP 节点只支持 TCP。
 4. 从本目录启动：
 
    ```sh
@@ -42,7 +42,9 @@ ssh -N -o ExitOnForwardFailure=yes \
   -L 127.0.0.1:3432:127.0.0.1:3432 用户名@Oracle公网IP
 ```
 
-再分别打开 `http://magpie-01.localhost:3431/?k=<实例01密钥>` 和 `http://magpie-02.localhost:3432/?k=<实例02密钥>`。用不同的主机名，避免浏览器在两个端口间共用登录 Cookie。如果设备不解析 `*.localhost`，可分别用独立的浏览器配置访问 `127.0.0.1:3431` 和 `127.0.0.1:3432`。不要分享带密钥的链接。
+Magpie 每次启动会生成临时 Web 登录密钥。在宿主机运行 `docker compose logs --tail=50 magpie-01 magpie-02`，分别从两个实例最新的启动日志复制 `?k=...`。在本机浏览器打开 `http://magpie-01.localhost:3431/?k=<实例01临时密钥>` 和 `http://magpie-02.localhost:3432/?k=<实例02临时密钥>`。用不同的主机名，避免浏览器在两个端口间共用登录 Cookie。如果设备不解析 `*.localhost`，可分别用独立的浏览器配置访问 `127.0.0.1:3431` 和 `127.0.0.1:3432`。不要分享带密钥的链接或启动日志。
+
+Web 登录密钥只用于打开管理界面，不是调用 API 的密钥。登录以后，在各实例的 **Gateway → Gateway keys** 自行创建 API Key；供应商凭据也可以在 **Providers** 中配置。你在 UI 创建的网关密钥随该实例的 `/config` 卷持久化，不受临时 Web 登录密钥轮换影响。
 
 关闭 SSH 就关闭本机访问通道，不会停服务。要关停单个实例，在宿主机运行 `docker compose stop magpie-01`；重新开启用 `docker compose start magpie-01`。Web UI 不作为 Docker 停机控制面。排障可用 `docker compose exec magpie-01 sh`，无需开放通用代理。
 
@@ -55,3 +57,7 @@ ssh -N -o ExitOnForwardFailure=yes \
 - `magpie-net-*` 持有各自实例的网络命名空间，负责设置默认路由和 DNS 限制。Magpie 本身没有 `NET_ADMIN`。重建网络容器时连同对应的 Magpie 一起重建，例如 `docker compose up -d --force-recreate magpie-net-01 magpie-01`。
 
 验收时从每个实例发起 HTTPS 请求，核对公网出口和 Mihomo 日志中的源地址、命中规则。停掉对应出口或 Mihomo 后，请求应失败而非走宿主机直连。IPv6 不启用，ICMP 不走这套 TCP/UDP 透明代理，不要用 `ping` 当作验收标准。
+
+## 许可证
+
+本仓库的部署配置和脚本采用 [MIT 许可证](LICENSE)；Magpie、Mihomo 和其他上游依赖沿用各自的许可证。
