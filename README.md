@@ -20,7 +20,7 @@ Oracle A1（ARM64）上用 Docker Compose 启动一个 Mihomo 和多个 Magpie�
    cp mihomo/config.example.yaml mihomo/config.yaml
    ```
 
-3. 无需预设 API Key 或 Web 登录密钥。可用 `MAGPIE_TZ_01`、`MAGPIE_TZ_02` 分别设置容器时区，默认 `Asia/Shanghai`。在 `mihomo/config.yaml` 填入真实 Shadowsocks 节点的地址、端口、加密方法和密码，保留 `udp: true`。服务端必须启用 UDP，且其防火墙和安全组要允许节点端口的 UDP 入站；出口必须能访问 `1.1.1.1:53`。不要把真实配置提交到 Git。
+3. 无需预设 API Key 或 Web 登录密钥。可用 `MAGPIE_TZ_01`、`MAGPIE_TZ_02` 分别设置容器时区，默认 `Asia/Shanghai`。在 `mihomo/config.yaml` 填入真实 Shadowsocks 节点的地址、端口、加密方法和密码。如果需要代理 UDP，保留 `udp: true`，并确认服务端和中转支持 UDP、节点端口放行 UDP。访问 IPv6-only HTTPS 目标时，Shadowsocks 节点须有可达的 IPv4 入口和可用的 IPv6 出口。不提交真实配置。
 4. 从本目录启动：
 
    ```sh
@@ -30,21 +30,23 @@ Oracle A1（ARM64）上用 Docker Compose 启动一个 Mihomo 和多个 Magpie�
    docker compose logs --tail=100 mihomo
    ```
 
-已有部署：不要用模板覆盖实际节点或规则。把原 `dns:` 块改为 `dns: {enable: false}`，并确认各实例匹配的 Shadowsocks 节点支持 UDP；保留源 IP 规则和 Web `tunnels:`。更新代码后执行 `docker compose up -d --build --force-recreate --wait`，重建后仍使用原有数据卷。
+已有部署：不要用模板覆盖实际节点或规则。将模板里的 `dns:` 块合并到 `mihomo/config.yaml`，并将 `store-fake-ip: true` 合入 `profile:`；保留 `proxies:`、`rules:`、`tunnels:`，不要重复定义同名配置块。更新代码后执行 `docker compose up -d --build --force-recreate --wait`，重建后仍使用原有数据卷。
 
-## DNS 出站
+## IPv4 Fake IP 和节点 IPv6 出站
 
-每台 Magpie 的系统 DNS 都是 `1.1.1.1`。Mihomo 不监听 DNS 端口，不使用 Fake IP，只透明代理 DNS 流量：`10.77.0.11` 的 DNS 查询经过 `EXIT-A`，`10.77.0.12` 的查询经过 `EXIT-B`。Docker 内置 DNS `127.0.0.11` 仍被阻止，也不配置直连兜底。
+Magpie 和 Mihomo 都保持 IPv4-only。各实例的系统 DNS 统一指向 `10.77.0.2`；Mihomo 对使用 Fake IP 的域名返回 `198.18.0.0/16` 内的 IPv4 地址。Magpie 用 IPv4 连接该地址，TPROXY 接管后，Mihomo 恢复原域名，按实例源 IP 选择 Shadowsocks 出口。对 TCP 连接，节点可以在远端解析域名，并通过 IPv6 访问只有 `AAAA` 记录的目标，容器本身不需要 IPv6。
 
-可用下面的命令验证系统解析，并检查 Mihomo 日志中发往 `1.1.1.1:53` 的连接是否分别命中 `EXIT-A` 和 `EXIT-B`：
+Docker 内置 DNS `127.0.0.11` 仍被阻止。现在系统 DNS 由 Mihomo 统一处理，不再按实例分别向 `1.1.1.1:53` 转发；Mihomo 需要实际做上游查询时，统一使用普通 DNS `1.1.1.1:53`，不使用 DoH。应用自己用 DoH、其它解析器或直接连接 IP 时，不能指望这套 Fake IP 映射。
+
+可用下列命令验证（也可以换成你确认只有 `AAAA` 记录的 HTTPS 测试域名）：
 
 ```sh
-docker compose exec magpie-01 getent ahostsv4 example.com
-docker compose exec magpie-02 getent ahostsv4 example.com
-docker compose logs --tail=100 mihomo | grep -F '1.1.1.1:53'
+docker compose exec magpie-01 getent ahostsv4 ipv6.icanhazip.com
+docker compose exec magpie-01 curl -4 --noproxy '*' --max-time 15 https://ipv6.icanhazip.com
+docker compose logs --tail=100 mihomo | grep -F 'ipv6.icanhazip.com'
 ```
 
-某个出口的 UDP 不通时，对应实例的系统 DNS 查询可能失败，即使该出口的 TCP 正常。排查时先确认 Shadowsocks 服务端和中转都支持 UDP。Mihomo 自己解析代理节点域名（如果使用域名作为 `server`）与 Magpie 的 DNS 分流是两件事。
+系统解析应返回 Fake IP，`curl` 应显示节点出口的 IPv6，Mihomo 日志应显示 `10.77.0.11` 命中 `EXIT-A`。`curl -4` 限制的是容器侧连接，不限制节点访问目标时的 IP 版本。如果节点没有 IPv6 出口，IPv6-only 目标应连接失败，不会回退到宿主机；双栈域名最终使用 IPv4 还是 IPv6 取决于节点的地址选择。不要用 Fake IP 作为 UDP/QUIC 能走 IPv6 的保证。
 
 ## Web 管理
 
@@ -71,7 +73,7 @@ Web 登录密钥只用于打开管理界面，不是调用 API 的密钥。登�
 - 新增实例时，复制一对 `magpie-net-02` 和 `magpie-02`，改服务名、网络命名空间引用、命名卷、环境变量和固定 IP（如 `10.77.0.13`）。在 Mihomo 的 `MATCH,REJECT` 前增加对应源 IP 规则，在 `tunnels:` 和 Compose 的 `mihomo.ports` 增加管理端口（如 `3433`）。固定出口不应配置 `DIRECT` 回退。
 - `magpie-net-*` 持有各自实例的网络命名空间，负责设置默认路由和 DNS 限制。Magpie 本身没有 `NET_ADMIN`。重建网络容器时连同对应的 Magpie 一起重建，例如 `docker compose up -d --force-recreate magpie-net-01 magpie-01`。
 
-验收时从每个实例发起 HTTPS 请求，核对公网出口和 Mihomo 日志中的源地址、命中规则。停掉对应出口或 Mihomo 后，请求应失败而非走宿主机直连。IPv6 不启用，ICMP 不走这套 TCP/UDP 透明代理，不要用 `ping` 当作验收标准。
+验收时从每个实例发起 HTTPS 请求，核对公网出口和 Mihomo 日志中的源地址、命中规则。停掉对应出口或 Mihomo 后，请求应失败而非走宿主机直连。容器不启用 IPv6，ICMP 不走这套 TCP/UDP 透明代理，不要用 `ping` 当作验收标准。
 
 ## 许可证
 

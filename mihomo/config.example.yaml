@@ -5,11 +5,21 @@ allow-lan: true
 bind-address: "*"
 tproxy-port: 7893
 
-dns:
-  enable: false
+profile:
+  store-fake-ip: true
 
-# Magpie 的 DNS 和其他出站流量都按源 IP 走各自的 Shadowsocks 节点。
-# 部署前替换地址、端口、加密方法和密码；服务端也必须启用 UDP。
+dns:
+  enable: true
+  listen: 10.77.0.2:53
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 1.1.1.1
+  nameserver:
+    - 1.1.1.1
+
+# 部署前替换地址、端口、加密方法和密码。若需要代理 UDP，服务端也要启用 UDP。
 proxies:
   - name: EXIT-A
     type: ss
