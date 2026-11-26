@@ -86,7 +86,7 @@ services:
         restart: true
     environment:
       MAGPIE_NAME: magpie-01
-      TZ: ${MAGPIE_TZ_01:-Asia/Shanghai}
+      TZ: ${MAGPIE_TZ_01:-}
     volumes:
       - *resolver
       - magpie_01_state:/config
@@ -107,7 +107,7 @@ services:
         restart: true
     environment:
       MAGPIE_NAME: magpie-02
-      TZ: ${MAGPIE_TZ_02:-Asia/Shanghai}
+      TZ: ${MAGPIE_TZ_02:-}
     volumes:
       - *resolver
       - magpie_02_state:/config

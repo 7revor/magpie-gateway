@@ -20,7 +20,7 @@ Oracle A1（ARM64）上用 Docker Compose 启动一个 Mihomo 和多个 Magpie�
    cp mihomo/config.example.yaml mihomo/config.yaml
    ```
 
-3. 无需预设 API Key 或 Web 登录密钥。可用 `MAGPIE_TZ_01`、`MAGPIE_TZ_02` 分别设置容器时区，默认 `Asia/Shanghai`。在 `mihomo/config.yaml` 填入真实 Shadowsocks 节点的地址、端口、加密方法和密码。如果需要代理 UDP，保留 `udp: true`，并确认服务端和中转支持 UDP、节点端口放行 UDP。访问 IPv6-only HTTPS 目标时，Shadowsocks 节点须有可达的 IPv4 入口和可用的 IPv6 出口。不提交真实配置。
+3. 无需预设 API Key 或 Web 登录密钥。可用 `MAGPIE_TZ_01`、`MAGPIE_TZ_02` 分别设置容器时区；不设置时留空。在 `mihomo/config.yaml` 填入真实 Shadowsocks 节点的地址、端口、加密方法和密码。如果需要代理 UDP，保留 `udp: true`，并确认服务端和中转支持 UDP、节点端口放行 UDP。访问 IPv6-only HTTPS 目标时，Shadowsocks 节点须有可达的 IPv4 入口和可用的 IPv6 出口。不提交真实配置。
 4. 从本目录启动：
 
    ```sh
