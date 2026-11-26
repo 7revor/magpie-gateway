@@ -1,0 +1,29 @@
+mode: rule
+log-level: info
+ipv6: false
+allow-lan: true
+bind-address: "*"
+tproxy-port: 7893
+
+dns:
+  enable: true
+  listen: 10.77.0.2:53
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - https://1.1.1.1/dns-query
+  nameserver:
+    - https://1.1.1.1/dns-query
+  proxy-server-nameserver:
+    - https://1.1.1.1/dns-query
+
+# 示例节点是保留地址，部署前替换为真实节点，保留名称或同步修改规则。
+proxies:
+  - {name: EXIT-A, type: http, server: 192.0.2.11, port: 1080}
+  - {name: EXIT-B, type: http, server: 192.0.2.12, port: 1080}
+
+rules:
+  - SRC-IP-CIDR,10.77.0.11/32,EXIT-A
+  - SRC-IP-CIDR,10.77.0.12/32,EXIT-B
+  - MATCH,REJECT
